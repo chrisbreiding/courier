@@ -6,16 +6,34 @@ config = require './config'
 app = express()
 mandrillClient = new mandrill.Mandrill config.API_KEY
 
+normalizeContent = (req, res, next)->
+  if req.get 'Content-Type'
+    next()
+  else
+    text = ''
+    req.setEncoding 'utf8'
+    req.on 'data', (chunk)-> text += chunk
+    req.on 'end', ->
+      req.body = {}
+      for pair in text.split '&'
+        pieces = pair.split '='
+        req.body[pieces[0]] = pieces[1]
+      next()
+
+normalizeReferrer = (req, res, next)->
+  req.referrer = req.get('Referrer') || req.get 'Origin'
+  next()
+
+app.use normalizeContent
+app.use normalizeReferrer
 app.use express.json()
 app.use express.urlencoded()
 
 app.post '/', (req, res)->
   res.setHeader 'Access-Control-Allow-Origin', '*'
 
-  # use Origin for IEs < 10, which don't send referrer with XDomainRequest
-  referrer = req.get('Referrer') || req.get 'Origin'
   recipient = _.find config.RECIPIENTS, (recipient)->
-    recipient.regex.test referrer
+    recipient.regex.test req.referrer
 
   return res.send 403 unless recipient
 
