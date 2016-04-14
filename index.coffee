@@ -1,10 +1,8 @@
 express = require 'express'
-request = require 'request'
-_ = require 'lodash'
+Mailgun = require 'mailgun-js'
 config = require './config'
 
-mailgunUrl = "https://api.mailgun.net/v3/#{config.MAIL_DOMAIN}/messages"
-
+mailgun = new Mailgun apiKey: config.API_KEY, domain: config.MAIL_DOMAIN
 app = express()
 
 normalizeContent = (req, res, next)->
@@ -21,22 +19,19 @@ normalizeContent = (req, res, next)->
         req.body[pieces[0]] = pieces[1]
       next()
 
-normalizeReferrer = (req, res, next)->
-  req.referrer = req.get('Referrer') || req.get 'Origin'
-  next()
-
 app.use normalizeContent
-app.use normalizeReferrer
 app.use express.json()
 app.use express.urlencoded()
 
 app.post '/', (req, res)->
-  res.setHeader 'Access-Control-Allow-Origin', '*'
+  recipient = config.RECIPIENTS.filter((recipient)->
+    (req.get('Origin') or '').indexOf(recipient.domain) > -1
+  )[0]
 
-  recipient = _.find config.RECIPIENTS, (recipient)->
-    recipient.regex.test req.referrer
-
-  return res.send 403 unless recipient
+  if recipient
+    res.setHeader 'Access-Control-Allow-Origin', recipient.domain
+  else
+    return res.send 403
 
   name    = req.body.name
   email   = req.body.email
@@ -60,17 +55,17 @@ app.post '/', (req, res)->
       Message: #{message}
     """
 
-  onSuccess = (result)->
-    res.send 200, result
+  onSuccess = ->
+    res.send 200, {}
 
   onError = (error)->
     res.send 500, error
 
-  request.post mailgunUrl, data, (err, response, body)->
+  mailgun.messages().send data, (err, body)->
     if err
       onError err
     else
-      onSuccess body
+      onSuccess()
 
 app.listen config.PORT, ->
   console.log "listening on #{config.PORT}..."
