@@ -1,10 +1,11 @@
 express = require 'express'
-mandrill = require 'mandrill-api/mandrill'
+request = require 'request'
 _ = require 'lodash'
 config = require './config'
 
+mailgunUrl = "https://api.mailgun.net/v3/#{config.MAIL_DOMAIN}/messages"
+
 app = express()
-mandrillClient = new mandrill.Mandrill config.API_KEY
 
 normalizeContent = (req, res, next)->
   if req.get 'Content-Type'
@@ -42,16 +43,22 @@ app.post '/', (req, res)->
   message = req.body.message
 
   data =
-    template_name: 'website-contact-form'
-    template_content: [
-      { name: 'contact-name',    content: name    }
-      { name: 'contact-email',   content: email   }
-      { name: 'contact-message', content: message }
-    ]
-    message:
-      from_name: name
-      from_email: recipient.email
-      to: [ email: recipient.email ]
+    from: recipient.email
+    to: recipient.email
+    subject: "Message sent through #{recipient.domain}"
+    html: """
+      <h3>Name</h3>
+      <p>#{name}</p>
+      <h3>Email</h3>
+      <p>#{email}</p>
+      <h3>Message</h3>
+      <p>#{message}</p>
+    """
+    text: """
+      Name: #{name},
+      Email #{email},
+      Message: #{message}
+    """
 
   onSuccess = (result)->
     res.send 200, result
@@ -59,7 +66,11 @@ app.post '/', (req, res)->
   onError = (error)->
     res.send 500, error
 
-  mandrillClient.messages.sendTemplate data, onSuccess, onError
+  request.post mailgunUrl, data, (err, response, body)->
+    if err
+      onError err
+    else
+      onSuccess body
 
 app.listen config.PORT, ->
   console.log "listening on #{config.PORT}..."

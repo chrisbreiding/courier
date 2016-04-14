@@ -6,7 +6,7 @@
   },
   "dependencies": {
     "express": "~3.5.1",
-    "mandrill-api": "~1.0.39",
-    "lodash": "~2.4.1"
+    "lodash": "~2.4.1",
+    "request": "^2.71.0"
   }
 }
